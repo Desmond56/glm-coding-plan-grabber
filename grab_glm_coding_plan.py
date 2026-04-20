@@ -338,6 +338,7 @@ def submit_order(config: Dict) -> Dict[str, Any]:
     }
 
     # 根据套餐类型确定产品ID和价格
+    # 这据前端JS代码中的信息
     plan_types = {
         "lite": {"productId": "product-5643e6", "payPrice": 49, "num": 1},
         "pro": {"productId": "product-d46f8b", "payPrice": 149, "num": 1},
@@ -349,10 +350,10 @@ def submit_order(config: Dict) -> Dict[str, Any]:
     payload = {
         "productId": selected_plan["productId"],
         "productType": config["plan_type"],
-        "payPrice": selected_plan["payPrice"],
+        "payPrice": float(selected_plan["payPrice"]),  # 使用浮点数格式
         "num": selected_plan["num"],
         "autoRenew": config["auto_renew"],
-        "channelCode": "default",  # 默认支付渠道
+        "channelCode": "coding_card",  # 使用正确的支付渠道
         "isMobile": False  # 不是移动端
     }
 
@@ -366,7 +367,7 @@ def submit_order(config: Dict) -> Dict[str, Any]:
             resp = httpx.post(API_SUBMIT_ORDER, headers=headers, json=payload, timeout=10)
         else:
             raise Exception("请安装 requests 或 httpx")
-        
+        import pdb; pdb.set_trace()
         # 检查响应状态码
         if resp.status_code in [200, 201]:  # 成功状态码
             # 检查响应是否为JSON格式
