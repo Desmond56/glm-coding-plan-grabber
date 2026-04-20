@@ -172,6 +172,7 @@ API_PAY_CREATE_SIGN = f"{API_BASE}{API_PREFIX}/biz/pay/create-sign"
 API_PAY_STATUS = f"{API_BASE}{API_PREFIX}/biz/pay/status"
 API_SUBSCRIPTION_LIST = f"{API_BASE}{API_PREFIX}/biz/subscription/list"
 API_USER_INFO = f"{API_BASE}{API_PREFIX}/user/info"
+API_CUSTOMER_INFO = f"{API_BASE}{API_PREFIX}/biz/customer/getCustomerInfo"
 
 
 # ==================== 通知模块 ====================
@@ -238,16 +239,37 @@ def validate_cookie(cookie: str) -> bool:
     if not cookie:
         return False
     
-    # 检查Cookie是否包含必要的字段
-    cookie_lower = cookie.lower()
-    # 检查是否包含常见的认证字段
-    auth_indicators = ["token", "session", "auth", "sid", "uid", "user"]
-    has_auth_field = any(indicator in cookie_lower for indicator in auth_indicators)
+    # 通过请求API来验证Cookie
+    headers = {
+        "Authorization": cookie,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://bigmodel.cn/coding-plan/personal/overview"
+    }
     
-    # 检查Cookie长度是否合理（太短可能是无效的）
-    is_reasonable_length = len(cookie) >= 20
-    
-    return has_auth_field and is_reasonable_length
+    try:
+        if requests:
+            resp = requests.get(API_CUSTOMER_INFO, headers=headers, timeout=10)
+        elif httpx:
+            resp = httpx.get(API_CUSTOMER_INFO, headers=headers, timeout=10)
+        else:
+            raise Exception("请安装 requests 或 httpx")
+        
+        # 如果返回成功状态码，说明Cookie有效
+        if resp.status_code == 200:
+            try:
+                result = resp.json()
+                # 检查返回的数据结构是否符合预期，表示验证成功
+                return result.get("success", False) or resp.status_code == 200
+            except ValueError:
+                # 如果不是JSON格式，但状态码是200，也认为是有效的
+                return True
+        else:
+            return False
+    except Exception:
+        return False
 
 
 def refresh_cookie_if_needed(config: Dict) -> str:
