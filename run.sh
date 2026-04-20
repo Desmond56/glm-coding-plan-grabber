@@ -23,6 +23,26 @@ if [ ! -s "config.py" ] || grep -q 'COOKIE = ""' config.py 2>/dev/null; then
     exit 1
 fi
 
+# 验证 Cookie 有效性
+echo "🔍 正在验证 Cookie 有效性..."
+if python3 -c "
+import sys
+sys.path.append('.')
+from grab_glm_coding_plan import load_config, validate_cookie
+config = load_config()
+if validate_cookie(config['cookie']):
+    print('✅ Cookie 验证成功')
+    sys.exit(0)
+else:
+    print('❌ Cookie 验证失败，请检查 Cookie 是否正确')
+    sys.exit(1)
+" 2>/dev/null; then
+    echo "✅ Cookie 验证通过，开始运行..."
+else
+    echo "❌ Cookie 验证失败，程序退出"
+    exit 1
+fi
+
 # 运行模式
 MODE=${1:-single}
 
