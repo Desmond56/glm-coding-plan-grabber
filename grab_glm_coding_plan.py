@@ -163,9 +163,15 @@ def prompt_for_mode() -> int:
 
 # ==================== API 配置 ====================
 API_BASE = "https://bigmodel.cn"
-API_SUBMIT_ORDER = f"{API_BASE}/api/glm-coding-plan/order"
-API_CHECK_STOCK = f"{API_BASE}/api/glm-coding-plan/stock"
-API_USER_INFO = f"{API_BASE}/api/user/info"
+API_PREFIX = "/api"
+API_SUBMIT_ORDER = f"{API_BASE}{API_PREFIX}/biz/product/createPreOrder"
+API_CHECK_STOCK = f"{API_BASE}{API_PREFIX}/biz/product/isLimitBuy"
+API_PRODUCT_INFO = f"{API_BASE}{API_PREFIX}/biz/product/info"
+API_PAY_PREVIEW = f"{API_BASE}{API_PREFIX}/biz/pay/preview"
+API_PAY_CREATE_SIGN = f"{API_BASE}{API_PREFIX}/biz/pay/create-sign"
+API_PAY_STATUS = f"{API_BASE}{API_PREFIX}/biz/pay/status"
+API_SUBSCRIPTION_LIST = f"{API_BASE}{API_PREFIX}/biz/subscription/list"
+API_USER_INFO = f"{API_BASE}{API_PREFIX}/user/info"
 
 
 # ==================== 通知模块 ====================
@@ -257,12 +263,12 @@ def refresh_cookie_if_needed(config: Dict) -> str:
 def check_stock(config: Dict) -> Dict[str, Any]:
     """检查套餐库存"""
     headers = {
-        "Cookie": config["cookie"],
+        "Authorization": config["cookie"],
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Referer": "https://bigmodel.cn/"
+        "Referer": "https://bigmodel.cn/coding-plan/personal/overview"
     }
     
     try:
@@ -275,11 +281,9 @@ def check_stock(config: Dict) -> Dict[str, Any]:
         
         # 检查响应状态码
         if resp.status_code == 200:
-            # 检查响应是否为JSON格式
             try:
                 return resp.json()
             except ValueError:
-                # 如果不是JSON格式，说明API可能已更改或返回了错误页面
                 return {"available": False, "reason": f"API响应格式错误: 返回了非JSON内容 - 可能API已变更"}
         elif resp.status_code == 404:
             return {"available": False, "reason": f"API端点不存在: {resp.status_code} - 可能API已变更"}
@@ -293,7 +297,6 @@ def check_stock(config: Dict) -> Dict[str, Any]:
 
 def submit_order(config: Dict) -> Dict[str, Any]:
     """提交订单"""
-    # 构建推广链接 Referer
     referral_url = config.get("referral_url", "")
     ic_code = config.get("ic_code", "")
     if referral_url and ic_code:
@@ -301,10 +304,10 @@ def submit_order(config: Dict) -> Dict[str, Any]:
     elif referral_url:
         referer = referral_url
     else:
-        referer = "https://bigmodel.cn/console/coding"
+        referer = "https://bigmodel.cn/coding-plan/personal/overview"
 
     headers = {
-        "Cookie": config["cookie"],
+        "Authorization": config["cookie"],
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
@@ -313,12 +316,10 @@ def submit_order(config: Dict) -> Dict[str, Any]:
     }
 
     payload = {
-        "plan_type": config["plan_type"],
-        "auto_renew": config["auto_renew"],
-        "timestamp": int(time.time() * 1000)
+        "productType": config["plan_type"],
+        "autoRenew": config["auto_renew"],
     }
 
-    # 如果有推广码，添加到 payload
     if ic_code:
         payload["ic"] = ic_code
     
