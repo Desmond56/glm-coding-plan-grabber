@@ -337,9 +337,23 @@ def submit_order(config: Dict) -> Dict[str, Any]:
         "Referer": referer
     }
 
+    # 根据套餐类型确定产品ID和价格
+    plan_types = {
+        "lite": {"productId": "product-5643e6", "payPrice": 49, "num": 1},
+        "pro": {"productId": "product-d46f8b", "payPrice": 149, "num": 1},
+        "max": {"productId": "product-7a8b9c", "payPrice": 469, "num": 1}  # 假设的ID，需要根据实际情况调整
+    }
+    
+    selected_plan = plan_types.get(config["plan_type"], plan_types["lite"])
+    
     payload = {
+        "productId": selected_plan["productId"],
         "productType": config["plan_type"],
+        "payPrice": selected_plan["payPrice"],
+        "num": selected_plan["num"],
         "autoRenew": config["auto_renew"],
+        "channelCode": "default",  # 默认支付渠道
+        "isMobile": False  # 不是移动端
     }
 
     if ic_code:
