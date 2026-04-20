@@ -338,7 +338,7 @@ def submit_order(config: Dict) -> Dict[str, Any]:
     }
 
     # 根据套餐类型确定产品ID和价格
-    # 这据前端JS代码中的信息
+    # 根据前端JS代码中的信息
     plan_types = {
         "lite": {"productId": "product-5643e6", "payPrice": 49, "num": 1},
         "pro": {"productId": "product-d46f8b", "payPrice": 149, "num": 1},
@@ -354,7 +354,8 @@ def submit_order(config: Dict) -> Dict[str, Any]:
         "num": selected_plan["num"],
         "autoRenew": config["auto_renew"],
         "channelCode": "coding_card",  # 使用正确的支付渠道
-        "isMobile": False  # 不是移动端
+        "isMobile": False,  # 不是移动端
+        "productPackageType": "coding_plan"  # 添加产品包类型
     }
 
     if ic_code:
