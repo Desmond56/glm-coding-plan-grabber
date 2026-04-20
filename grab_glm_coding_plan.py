@@ -56,7 +56,7 @@ def load_config() -> Dict[str, Any]:
         "max_retries": 300,
         "plan_type": "lite",
         "auto_renew": True,
-        "ic_code": "JO7VUQL6WC",  # 推广邀请码（写死在 exe 中）
+        "ic_code": os.getenv("ZHIPU_IC_CODE", ""),  # 从环境变量或配置文件加载推广邀请码
         "referral_url": "https://www.bigmodel.cn/glm-coding",
     }
 
@@ -93,6 +93,8 @@ def load_config() -> Dict[str, Any]:
                         config["plan_type"] = value
                     elif key == "AUTO_RENEW":
                         config["auto_renew"] = value.lower() == "true"
+                    elif key == "IC_CODE":
+                        config["ic_code"] = value
                 except Exception:
                     pass
 
@@ -174,15 +176,18 @@ def send_feishu_notification(webhook: str, user_id: str, message: str):
         return
     
     try:
-        import requests
-        payload = {
-            "msg_type": "text",
-            "content": {"text": message}
-        }
-        if user_id:
-            payload["at"] = {"at_user_ids": [user_id]}
-        
-        requests.post(webhook, json=payload, timeout=10)
+        # 使用全局导入的 requests，避免重复导入
+        if requests:
+            payload = {
+                "msg_type": "text",
+                "content": {"text": message}
+            }
+            if user_id:
+                payload["at"] = {"at_user_ids": [user_id]}
+            
+            requests.post(webhook, json=payload, timeout=10)
+        else:
+            print(f"[通知失败] requests 模块未安装")
     except Exception as e:
         print(f"[通知失败] {e}")
 
@@ -227,9 +232,16 @@ def validate_cookie(cookie: str) -> bool:
     if not cookie:
         return False
     
-    # 简单检查Cookie格式
-    required_keys = ["token", "uid"]
-    return any(k in cookie.lower() for k in required_keys)
+    # 检查Cookie是否包含必要的字段
+    cookie_lower = cookie.lower()
+    # 检查是否包含常见的认证字段
+    auth_indicators = ["token", "session", "auth", "sid", "uid", "user"]
+    has_auth_field = any(indicator in cookie_lower for indicator in auth_indicators)
+    
+    # 检查Cookie长度是否合理（太短可能是无效的）
+    is_reasonable_length = len(cookie) >= 20
+    
+    return has_auth_field and is_reasonable_length
 
 
 def refresh_cookie_if_needed(config: Dict) -> str:
@@ -303,24 +315,53 @@ def submit_order(config: Dict) -> Dict[str, Any]:
         else:
             raise Exception("请安装 requests 或 httpx")
         
-        result = resp.json() if resp.text else {}
-        
-        if resp.status_code == 200:
-            if result.get("success") or result.get("code") == 0:
-                return {
-                    "success": True,
-                    "order_id": result.get("order_id", f"ORD_{int(time.time())}"),
-                    "message": result.get("message", "下单成功")
-                }
-            else:
-                return {
-                    "success": False,
-                    "reason": result.get("message", result.get("msg", "下单失败"))
-                }
-        else:
+        # 检查响应状态码
+        if resp.status_code not in [200, 201, 400, 401, 403, 429]:  # 常见的状态码
             return {
                 "success": False,
-                "reason": f"HTTP {resp.status_code}: {resp.text[:200]}"
+                "reason": f"HTTP {resp.status_code}: 服务器返回非预期状态码"
+            }
+        
+        # 尝试解析JSON响应
+        try:
+            result = resp.json() if resp.text else {}
+        except ValueError:  # JSON解析失败
+            return {
+                "success": False,
+                "reason": f"响应格式错误: {resp.text[:200]}"
+            }
+        
+        # 检查API返回的成功标志
+        if resp.status_code == 200:
+            # 检查API特定的成功标识
+            success_flag = result.get("success") or result.get("code") == 0 or result.get("code") == "0"
+            if success_flag:
+                return {
+                    "success": True,
+                    "order_id": result.get("order_id", result.get("orderId", f"ORD_{int(time.time())}")),
+                    "message": result.get("message", result.get("msg", "下单成功"))
+                }
+            else:
+                # 从响应中提取错误信息
+                error_msg = result.get("message") or result.get("msg") or result.get("error") or "下单失败"
+                # 检查是否是库存不足等临时错误
+                if any(keyword in error_msg.lower() for keyword in ["库存", "配额", "售罄", "sold out", "quota", "stock"]):
+                    return {
+                        "success": False,
+                        "reason": error_msg,
+                        "is_temporary_error": True
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "reason": error_msg
+                    }
+        else:
+            # 非200状态码的处理
+            error_detail = result.get("message", result.get("msg", f"HTTP {resp.status_code}")) if result else f"HTTP {resp.status_code}"
+            return {
+                "success": False,
+                "reason": f"请求失败: {error_detail}"
             }
     except Exception as e:
         return {"success": False, "reason": str(e)}
@@ -350,8 +391,10 @@ def grab_plan(config: Dict, retry_count: int = 0) -> bool:
         reason = result.get("reason", "未知错误")
         print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ {reason}")
         
-        # 非终结性错误才重试
-        retryable = any(x in reason.lower() for x in ["配额", "售罄", "库存", "sold", "quota", "stock"])
+        # 检查是否是临时错误（库存不足等），如果是则继续重试
+        is_temp_error = result.get("is_temporary_error", False)
+        retryable = is_temp_error or any(x in reason.lower() for x in ["配额", "售罄", "库存", "sold", "quota", "stock"])
+        
         if retryable or retry_count < 3:
             return False
         else:
@@ -382,8 +425,10 @@ def countdown_and_grab(config: Dict):
     print(f"{'='*50}\n")
     
     # 等待到提前监控时间
-    if wait_seconds > pre_start:
-        time.sleep(wait_seconds - pre_start)
+    sleep_time = wait_seconds - pre_start
+    if sleep_time > 0:
+        time.sleep(sleep_time)
+    # 如果 sleep_time <= 0，说明已经到了或过了预启动时间，不需要额外等待
     
     # 持续重试直到成功或超时
     start_time = time.time()
@@ -402,6 +447,30 @@ def countdown_and_grab(config: Dict):
         # 越接近抢购时间，间隔越短
         interval = max(0.1, config["retry_interval"] * (0.9 ** min(retry_count, 10)))
         jitter = random.uniform(0.05, 0.15)
+        time.sleep(interval + jitter)
+    
+    return False
+
+
+def grab_immediately(config: Dict):
+    """立即执行抢购，不进行任何等待"""
+    print("🚀 立即开始抢购...")
+    
+    # 立即开始抢购，不等待
+    retry_count = 0
+    while True:
+        if grab_plan(config, retry_count):
+            return True
+        
+        retry_count += 1
+        if config["max_retries"] > 0 and retry_count >= config["max_retries"]:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 已达最大重试次数")
+            break
+        
+        # 使用配置的重试间隔
+        interval = max(0.1, config["retry_interval"] * (0.9 ** min(retry_count, 10)))
+        jitter = random.uniform(0.05, 0.15)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 等待 {interval + jitter:.2f} 秒后重试...")
         time.sleep(interval + jitter)
     
     return False
@@ -436,13 +505,16 @@ def run_daemon(config: Dict):
         # 等待
         time.sleep(min(seconds_until, 3600))  # 最多睡1小时，防止时间跳变
         
-        # 再次检查是否到点
+        # 再次检查是否到点，确保在正确的时间窗口内
         now = datetime.now()
-        if now.hour == config["grab_hour"] and now.minute == config["grab_minute"]:
+        # 检查是否在目标时间的1分钟窗口内，避免错过时间点
+        if (now.hour == config["grab_hour"] and 
+            now.minute == config["grab_minute"] and 
+            now.second < 60):  # 在目标分钟内
             countdown_and_grab(config)
         
-        # 避免重复触发
-        time.sleep(60)
+        # 避免重复触发，在整分钟后等待，直到下一分钟开始
+        time.sleep(60 - now.second if now.second < 60 else 1)
 
 
 # ==================== 主入口 ====================
@@ -496,7 +568,7 @@ def main():
         run_daemon(config)
     elif args.test:
         print("🧪 测试模式：立即尝试抢购\n")
-        countdown_and_grab(config)
+        grab_immediately(config)  # 直接抢购，不等待
     else:
         # 交互式选择模式
         mode = prompt_for_mode()
@@ -504,7 +576,7 @@ def main():
             run_daemon(config)
         elif mode == 3:
             print("🧪 测试模式：立即尝试抢购\n")
-            countdown_and_grab(config)
+            grab_immediately(config)  # 直接抢购，不等待
         else:
             print("📌 单次抢购模式\n")
             countdown_and_grab(config)

@@ -1,15 +1,15 @@
-# GLM Coding Plan Grabber
+# GLM Coding Plan 抢购工具
 
-智谱 AI GLM Coding Plan 自动抢购/订阅脚本
+智谱AI编程套餐自动抢购脚本
 
 ## 功能特性
 
 - ✅ 自动抢购 GLM Coding Plan 订阅套餐
-- ✅ 支持定时任务和循环重试
+- ✅ 支持守护模式和定时任务
 - ✅ 登录状态检查和会话管理
 - ✅ 套餐库存监控
 - ✅ 飞书通知推送
-- ✅ 彩色终端日志输出
+- ✅ 交互式用户界面
 - ✅ 优雅的进程终止处理
 
 ## 套餐信息
@@ -61,31 +61,40 @@ pip install -r requirements.txt
 复制配置文件并填入真实值：
 
 ```bash
-cp config_user.py config.py
+cp config.example.py config.py
 ```
 
 编辑 `config.py`：
 
 ```python
-# 智谱 AI 登录 Cookie（必须）
-# 获取方法：登录 bigmodel.cn → F12 → Network → 任意请求复制 Cookie 头
-COOKIE = "your_cookie_here"
+# 智谱AI登录Cookie（必须）
+# 获取方法：登录 bigmodel.cn → F12 → Network → 任意请求复制Cookie头
+COOKIE = ""
 
-# 飞书 Webhook 地址（可选）
-FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
+# 飞书Webhook地址（可选，留空则打印到终端）
+FEISHU_WEBHOOK = ""
+
+# 飞书用户ID（可选，用于@某人）
+FEISHU_USER_ID = ""
 
 # 每日抢购时间
 GRAB_HOUR = 10
 GRAB_MINUTE = 0
 
-# 要购买的套餐：lite / pro / max
-PLAN_TYPE = "lite"
+# 提前多少秒开始监控（秒）
+PRE_START_SECONDS = 30
 
 # 抢购失败后重试间隔（秒）
 RETRY_INTERVAL = 1
 
 # 最大重试次数（0=不限制）
 MAX_RETRIES = 300
+
+# 要购买的套餐：lite / pro / max
+PLAN_TYPE = "lite"
+
+# 是否自动续订
+AUTO_RENEW = True
 ```
 
 ### 3. 获取 Cookie
@@ -101,55 +110,50 @@ MAX_RETRIES = 300
 ### 4. 运行脚本
 
 ```bash
-# 运行单次抢购
-python main.py run
+# 运行单次抢购（交互式选择）
+python grab_glm_coding_plan.py
 
-# 运行定时抢购
-python main.py schedule
+# 运行守护模式（每日定时）
+python grab_glm_coding_plan.py --daemon
 
-# 检查登录状态
-python main.py check
+# 运行测试模式（立即尝试）
+python grab_glm_coding_plan.py --test
 
-# 查看订阅信息
-python main.py info
-
-# 指定套餐运行
-python main.py run --plan pro
-
-# 指定重试次数
-python main.py run --retries 50
+# 使用便捷脚本运行
+./run.sh              # 单次抢购
+./run.sh daemon       # 守护模式
+./run.sh test         # 测试模式
 ```
 
-## 命令说明
+## 运行模式
 
-| 命令 | 说明 |
+| 模式 | 参数 | 说明 |
+|------|------|------|
+| 交互模式 | (无参数) | 运行时交互选择模式 | 
+| 守护模式 | `--daemon` | 每日定时自动抢购 |
+| 测试模式 | `--test` | 立即尝试抢购（测试） |
+
+## 脚本说明
+
+| 脚本 | 说明 |
 |------|------|
-| `run` | 运行一次抢购（失败会重试） |
-| `schedule` | 运行定时抢购模式 |
-| `check` | 检查登录状态 |
-| `info` | 查看当前订阅信息 |
-| `help` | 显示帮助信息 |
-
-## 选项说明
-
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--plan <类型>` | 指定套餐类型 (lite/pro/max) | config 中的 PLAN_TYPE |
-| `--retries <次>` | 指定最大重试次数 | config 中的 MAX_RETRIES |
+| `grab_glm_coding_plan.py` | 主程序，支持多种运行模式 |
+| `run.sh` | 便捷启动脚本 |
+| `config.example.py` | 配置文件模板 |
 
 ## 配置说明
 
 ### 账号配置
 
 ```python
-COOKIE = ""  # 智谱 AI 登录 Cookie
+COOKIE = ""  # 智谱AI登录Cookie
 ```
 
 ### 通知配置
 
 ```python
-FEISHU_WEBHOOK = ""  # 飞书机器人 Webhook 地址
-FEISHU_USER_ID = ""  # 飞书用户 ID（用于@某人）
+FEISHU_WEBHOOK = ""  # 飞书机器人Webhook地址
+FEISHU_USER_ID = ""  # 飞书用户ID（用于@某人）
 ```
 
 ### 抢购配置
@@ -157,7 +161,7 @@ FEISHU_USER_ID = ""  # 飞书用户 ID（用于@某人）
 ```python
 GRAB_HOUR = 10          # 每日抢购时间（小时）
 GRAB_MINUTE = 0         # 每日抢购时间（分钟）
-PRE_START_SECONDS = 30  # 提前多少秒开始监控
+PRE_START_SECONDS = 30  # 提前多少秒开始监控（秒）
 RETRY_INTERVAL = 1      # 抢购失败后重试间隔（秒）
 MAX_RETRIES = 300       # 最大重试次数（0=不限制）
 ```
@@ -169,12 +173,12 @@ PLAN_TYPE = "lite"   # 要购买的套餐：lite / pro / max
 AUTO_RENEW = True    # 是否自动续订
 ```
 
-## 定时抢购模式
+## 守护模式
 
-定时抢购模式会在指定时间前开始监控，自动尝试抢购：
+守护模式会在后台持续运行，每天在指定时间自动抢购：
 
 ```bash
-python main.py schedule
+python grab_glm_coding_plan.py --daemon
 ```
 
 脚本会在以下时机自动执行抢购：

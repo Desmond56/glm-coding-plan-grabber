@@ -7,7 +7,11 @@ cd "$DIR"
 # 检查依赖
 if ! python3 -c "import requests" 2>/dev/null; then
     echo "📦 安装依赖..."
-    pip install requests httpx -q
+    # 首先尝试用户级别安装，避免权限问题
+    pip3 install --user requests httpx -q || pip install --user requests httpx -q || {
+        echo "⚠️  尝试使用 pip3 安装..."
+        pip3 install requests httpx -q || pip install requests httpx -q
+    }
 fi
 
 # 检查配置
