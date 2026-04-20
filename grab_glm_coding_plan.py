@@ -259,7 +259,10 @@ def check_stock(config: Dict) -> Dict[str, Any]:
     headers = {
         "Cookie": config["cookie"],
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://bigmodel.cn/"
     }
     
     try:
@@ -270,12 +273,17 @@ def check_stock(config: Dict) -> Dict[str, Any]:
         else:
             raise Exception("请安装 requests 或 httpx")
         
+        # 检查响应状态码
         if resp.status_code == 200:
             return resp.json()
+        elif resp.status_code == 404:
+            return {"available": False, "reason": f"API端点不存在: {resp.status_code} - 可能API已变更"}
+        elif resp.status_code == 401 or resp.status_code == 403:
+            return {"available": False, "reason": f"认证失败: {resp.status_code} - Cookie可能已失效"}
         else:
-            return {"available": False, "reason": f"HTTP {resp.status_code}"}
+            return {"available": False, "reason": f"HTTP {resp.status_code}: {resp.text[:200]}"}
     except Exception as e:
-        return {"available": False, "reason": str(e)}
+        return {"available": False, "reason": f"请求异常: {str(e)}"}
 
 
 def submit_order(config: Dict) -> Dict[str, Any]:
@@ -293,7 +301,9 @@ def submit_order(config: Dict) -> Dict[str, Any]:
     headers = {
         "Cookie": config["cookie"],
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         "Referer": referer
     }
 
@@ -316,23 +326,16 @@ def submit_order(config: Dict) -> Dict[str, Any]:
             raise Exception("请安装 requests 或 httpx")
         
         # 检查响应状态码
-        if resp.status_code not in [200, 201, 400, 401, 403, 429]:  # 常见的状态码
-            return {
-                "success": False,
-                "reason": f"HTTP {resp.status_code}: 服务器返回非预期状态码"
-            }
-        
-        # 尝试解析JSON响应
-        try:
-            result = resp.json() if resp.text else {}
-        except ValueError:  # JSON解析失败
-            return {
-                "success": False,
-                "reason": f"响应格式错误: {resp.text[:200]}"
-            }
-        
-        # 检查API返回的成功标志
-        if resp.status_code == 200:
+        if resp.status_code in [200, 201]:  # 成功状态码
+            # 尝试解析JSON响应
+            try:
+                result = resp.json() if resp.text else {}
+            except ValueError:  # JSON解析失败
+                return {
+                    "success": False,
+                    "reason": f"响应格式错误: {resp.text[:200]}"
+                }
+            
             # 检查API特定的成功标识
             success_flag = result.get("success") or result.get("code") == 0 or result.get("code") == "0"
             if success_flag:
@@ -356,9 +359,30 @@ def submit_order(config: Dict) -> Dict[str, Any]:
                         "success": False,
                         "reason": error_msg
                     }
+        elif resp.status_code == 404:
+            return {
+                "success": False,
+                "reason": f"API端点不存在: {resp.status_code} - 可能API已变更"
+            }
+        elif resp.status_code == 401 or resp.status_code == 403:
+            return {
+                "success": False,
+                "reason": f"认证失败: {resp.status_code} - Cookie可能已失效"
+            }
+        elif resp.status_code == 429:
+            return {
+                "success": False,
+                "reason": f"请求频率过高: {resp.status_code} - 触发限流机制",
+                "is_temporary_error": True
+            }
         else:
-            # 非200状态码的处理
-            error_detail = result.get("message", result.get("msg", f"HTTP {resp.status_code}")) if result else f"HTTP {resp.status_code}"
+            # 非预期状态码的处理
+            try:
+                result = resp.json() if resp.text else {}
+                error_detail = result.get("message", result.get("msg", f"HTTP {resp.status_code}")) if result else f"HTTP {resp.status_code}"
+            except ValueError:
+                error_detail = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            
             return {
                 "success": False,
                 "reason": f"请求失败: {error_detail}"
