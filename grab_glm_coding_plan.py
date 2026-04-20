@@ -163,8 +163,8 @@ def prompt_for_mode() -> int:
 
 # ==================== API 配置 ====================
 API_BASE = "https://bigmodel.cn"
-API_SUBMIT_ORDER = f"{API_BASE}/glm-coding/api/order/create"
-API_CHECK_STOCK = f"{API_BASE}/glm-coding/api/plan/stock"
+API_SUBMIT_ORDER = f"{API_BASE}/api/glm-coding-plan/order"
+API_CHECK_STOCK = f"{API_BASE}/api/glm-coding-plan/stock"
 API_USER_INFO = f"{API_BASE}/api/user/info"
 
 
@@ -275,7 +275,12 @@ def check_stock(config: Dict) -> Dict[str, Any]:
         
         # 检查响应状态码
         if resp.status_code == 200:
-            return resp.json()
+            # 检查响应是否为JSON格式
+            try:
+                return resp.json()
+            except ValueError:
+                # 如果不是JSON格式，说明API可能已更改或返回了错误页面
+                return {"available": False, "reason": f"API响应格式错误: 返回了非JSON内容 - 可能API已变更"}
         elif resp.status_code == 404:
             return {"available": False, "reason": f"API端点不存在: {resp.status_code} - 可能API已变更"}
         elif resp.status_code == 401 or resp.status_code == 403:
@@ -327,13 +332,13 @@ def submit_order(config: Dict) -> Dict[str, Any]:
         
         # 检查响应状态码
         if resp.status_code in [200, 201]:  # 成功状态码
-            # 尝试解析JSON响应
+            # 检查响应是否为JSON格式
             try:
-                result = resp.json() if resp.text else {}
+                result = resp.json()
             except ValueError:  # JSON解析失败
                 return {
                     "success": False,
-                    "reason": f"响应格式错误: {resp.text[:200]}"
+                    "reason": f"响应格式错误: {resp.text[:200]} - 可能API已变更或返回了错误页面"
                 }
             
             # 检查API特定的成功标识
@@ -378,10 +383,10 @@ def submit_order(config: Dict) -> Dict[str, Any]:
         else:
             # 非预期状态码的处理
             try:
-                result = resp.json() if resp.text else {}
+                result = resp.json()
                 error_detail = result.get("message", result.get("msg", f"HTTP {resp.status_code}")) if result else f"HTTP {resp.status_code}"
             except ValueError:
-                error_detail = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                error_detail = f"HTTP {resp.status_code}: {resp.text[:200]} - 可能API已变更或返回了错误页面"
             
             return {
                 "success": False,
