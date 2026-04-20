@@ -163,8 +163,8 @@ def prompt_for_mode() -> int:
 
 # ==================== API 配置 ====================
 API_BASE = "https://bigmodel.cn"
-API_SUBMIT_ORDER = f"{API_BASE}/api/glm-coding-plan/order"
-API_CHECK_STOCK = f"{API_BASE}/api/glm-coding-plan/stock"
+API_SUBMIT_ORDER = f"{API_BASE}/glm-coding/api/order/create"
+API_CHECK_STOCK = f"{API_BASE}/glm-coding/api/plan/stock"
 API_USER_INFO = f"{API_BASE}/api/user/info"
 
 
