@@ -349,13 +349,13 @@ def submit_order(config: Dict) -> Dict[str, Any]:
     
     payload = {
         "productId": selected_plan["productId"],
-        "productType": config["plan_type"],
+        "productType": "coding_plan",  # 使用固定的coding_plan类型
         "payPrice": float(selected_plan["payPrice"]),  # 使用浮点数格式
         "num": selected_plan["num"],
         "autoRenew": config["auto_renew"],
         "channelCode": "coding_card",  # 使用正确的支付渠道
         "isMobile": False,  # 不是移动端
-        "productPackageType": "coding_plan"  # 添加产品包类型
+        "productPackageType": config["plan_type"]  # 使用配置的套餐类型作为产品包类型
     }
 
     if ic_code:
